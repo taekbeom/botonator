@@ -1,0 +1,80 @@
+version: '3'
+
+services:
+  telegram_bot:
+    container_name: telegram_bot
+    build:
+      context: ./telegram_bot
+    volumes:
+      - logs:/var/log/postgresql
+    environment:
+      TOKEN: ${TOKEN}
+      RM_HOST: ${RM_HOST}
+      RM_PORT: ${RM_PORT}
+      RM_USER: ${RM_USER}
+      RM_PASSWORD: ${RM_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+    networks:
+      new_network:
+        ipv4_address: 172.127.0.10
+
+  primary:
+    container_name: primary
+    build:
+      context: ./primary
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256\nhost replication repl_user ${DB_REPL_HOST}/24 scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    user: root
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+      - logs:/var/log/postgresql
+    networks:
+      new_network:
+        ipv4_address: 172.127.0.11
+    ports:
+      - "5432:5432"
+    restart: always
+
+  replica:
+    container_name: replica
+    build:
+      context: ./replica
+    depends_on:
+      - primary
+    environment:
+      PGUSER: ${DB_REPL_USER}
+      PGPASSWORD: ${DB_REPL_PASSWORD}
+    user: postgres
+    command: |
+        bash -c "
+        rm -rf /var/lib/postgresql/data/* &&
+        pg_basebackup -R -h primary -D /var/lib/postgresql/data
+        sleep 5s
+        chmod 0700 /var/lib/postgresql/data
+        postgres
+        "
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+    networks:
+      new_network:
+        ipv4_address: 172.127.0.12
+    restart: always
+
+networks:
+  new_network:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.127.0.0/24
+
+volumes:
+  primary_data:
+  replica_data:
+  logs:
