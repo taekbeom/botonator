@@ -263,7 +263,6 @@ commands_linux = {
     "get_critical": "journalctl -p 3 -n 5",
     "get_ps": "ps -e | head -n 30",
     "get_ss": "ss -tulnp",
-    # "get_repl_logs": "tac /var/log/postgresql/postgresql-15-main.log | grep -E 'repl|accept connection' | head -n 20"
 }
 
 def main():
