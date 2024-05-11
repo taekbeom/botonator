@@ -1,0 +1,10 @@
+PRIMARY_HOST: 192.168.74.158
+REPLICA_HOST: 192.168.74.190
+
+DB_DATABASE: bottle_db
+DB_USER: postgres
+DB_PASSWORD: eve@123
+
+DB_REPL_USER: repl_user
+
+BOT_REPO: https://github.com/taekbeom/botonator.git

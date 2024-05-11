@@ -1,0 +1,234 @@
+- name: bot
+  hosts: all
+  become: yes
+
+- hosts: db_primary
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Locale patch for postgres
+      become: yes
+      lineinfile: dest=/etc/default/locale line='LANGUAGE="en_US:en"' state=present
+      
+    - name: Locale patch for postgres
+      become: yes
+      lineinfile: dest=/etc/default/locale line='LC_ALL="en_US.UTF-8"' state=present
+
+    - name: postgres installation
+      become: yes
+      apt:
+        name: postgresql
+        state: present
+
+    - name: pip installation
+      become: yes
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: py module installation
+      become: yes
+      pip:
+        name: psycopg2-binary
+        state: present
+
+    - name: add directory
+      become: yes
+      ansible.builtin.file:
+        path: /oracle/pg_data/archive/
+        state: directory
+        mode: 0777
+        recurse: yes
+
+    - name: create database
+      become: yes
+      become_user: postgres
+      postgresql_db:
+        name: "{{ DB_DATABASE }}"
+        state: present
+
+    - name: create postgres user
+      become: yes
+      become_user: postgres
+      postgresql_user:
+        db: "{{ DB_DATABASE }}"
+        name: "{{ DB_USER }}"
+        password: "{{ DB_PASSWORD }}"
+
+    - name: transfer init.sql
+      ansible.builtin.copy:
+        src: init.sql
+        dest: ~/init.sql
+
+    - name: transfer completely init.sql
+      slurp:
+        src: init.sql
+      register: init_sql
+
+    - name: execute init.sql
+      become: yes
+      become_user: postgres
+      postgresql_query:
+        db: "{{ DB_DATABASE }}"
+        query: "{{ init_sql.content | b64decode }}"
+        login_user: "{{ DB_USER }}"
+        login_password: "{{ DB_PASSWORD }}"
+
+    - name: pg_hba.conf base
+      become: yes
+      become_user: postgres
+      postgresql_pg_hba:
+        dest: /etc/postgresql/14/main/pg_hba.conf
+        contype: host
+        source:  "{{ PRIMARY_HOST }}/32"
+        users: all
+        databases: all
+        method: password
+        create: true
+
+    - name: pg_hba.conf
+      become: yes
+      become_user: postgres
+      postgresql_pg_hba:
+        dest: /etc/postgresql/14/main/pg_hba.conf
+        contype: host
+        source: "{{ REPLICA_HOST }}/24"
+        users: "{{ DB_REPL_USER }}"
+        databases: replication
+        method: scram-sha-256
+        create: true
+
+    - name: replica vars
+      become: yes
+      become_user: postgres
+      community.postgresql.postgresql_set:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+      with_dict:
+        archive_mode: 'on'
+        archive_command: 'cp %p /oracle/pg_data/archive/%f'
+        max_wal_senders: '10'
+        wal_level: 'replica'
+        log_replication_commands: 'on'
+        wal_log_hints: 'on'
+        logging_collector: 'on'
+        log_directory: '/var/log/postgresql'
+        log_filename: 'postgresql-15-main.log'
+        listen_addresses: '*'
+
+    - name: stop postgresql
+      become: yes
+      service:
+        name: postgresql
+        state: stopped
+
+    - name: start postgresql
+      become: yes
+      service:
+        name: postgresql
+        state: started
+
+    - name: set permissions
+      become: yes
+      ansible.builtin.file:
+        path: /var/log/postgresql/postgresql-15-main.log
+        owner: postgres
+        group: postgres
+        mode: 0755
+
+- hosts: db_replica
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: postgres installation
+      become: yes
+      apt:
+        name: postgresql
+        state: present
+
+    - name: pip installation
+      become: yes
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: py module installation
+      become: yes
+      pip:
+        name: psycopg2-binary
+        state: present
+
+    - name: start postgresql
+      become: yes
+      service:
+        name: postgresql
+        state: started
+
+    - name: postgresql vars
+      become: yes
+      become_user: postgres
+      community.postgresql.postgresql_set:
+        name: "listen_addresses"
+        value: "localhost, {{ PRIMARY_HOST }}"
+
+    - name: stop postgresql
+      become: yes
+      service:
+        name: postgresql
+        state: stopped
+
+    - name: remove files
+      become: yes
+      file:
+        path: /var/lib/postgresql/14/main/
+        state: absent
+
+    - name: replication
+      become: yes
+      become_user: postgres
+      register: result
+      until: result.rc == 0
+      shell: |
+        export PGPASSWORD="{{ DB_PASSWORD }}" &&
+        pg_basebackup -R -h {{ PRIMARY_HOST }} -U {{ DB_REPL_USER }} -D /var/lib/postgresql/14/main -P -v
+
+    - name: start postgresql
+      become: yes
+      service:
+        name: postgresql
+        state: started
+
+- hosts: db_primary
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: required packages
+      become: yes
+      apt:
+        name: libpq-dev
+        state: present
+
+    - name: git installation
+      become: yes
+      apt:
+        name: git
+        state: present
+
+    - name: repo clone
+      ansible.builtin.git:
+        repo: "{{ BOT_REPO }}"
+        dest: "~/bot"
+        update: yes
+        version: docker
+
+    - name: requirements installation
+      pip:
+        requirements: "~/bot/telegram_bot/requirements.txt"
+
+    - name: transfer .env
+      copy:
+        src: .env
+        dest: "~/bot/.env"
+
+    - name: execute main.py
+      command: "python3 ~/bot/telegram_bot/main.py"
