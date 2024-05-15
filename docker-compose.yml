@@ -1,10 +1,10 @@
 version: '3'
 
 services:
-  telegram_bot:
-    container_name: telegram_bot
+  bot:
+    container_name: bot
     build:
-      context: ./telegram_bot
+      context: ./bot
     volumes:
       - logs:/var/log/postgresql
     environment:
@@ -21,10 +21,10 @@ services:
       new_network:
         ipv4_address: 172.127.0.10
 
-  primary:
-    container_name: primary
+  db:
+    container_name: db
     build:
-      context: ./primary
+      context: ./db
     environment:
       POSTGRES_DB: ${DB_DATABASE}
       POSTGRES_USER: ${DB_USER}
@@ -42,12 +42,12 @@ services:
       - "5432:5432"
     restart: always
 
-  replica:
-    container_name: replica
+  db_repl:
+    container_name: db_repl
     build:
-      context: ./replica
+      context: ./db_repl
     depends_on:
-      - primary
+      - db
     environment:
       PGUSER: ${DB_REPL_USER}
       PGPASSWORD: ${DB_REPL_PASSWORD}
@@ -55,7 +55,7 @@ services:
     command: |
         bash -c "
         rm -rf /var/lib/postgresql/data/* &&
-        pg_basebackup -R -h primary -D /var/lib/postgresql/data
+        pg_basebackup -R -h db -D /var/lib/postgresql/data
         sleep 5s
         chmod 0700 /var/lib/postgresql/data
         postgres
