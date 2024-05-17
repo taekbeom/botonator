@@ -84,7 +84,7 @@ def verify_password_command(update: Update, context):
     return 'verify_password'
 
 def get_apt_list_command(update: Update, context):
-    result = ssh_connect('apt list | head -n 30')
+    result = ssh_connect('apt list --installed | head -n 30')
     update.message.reply_text(f'{result}\nType in package')
     return 'get_apt_list'
 
@@ -261,7 +261,7 @@ commands_linux = {
     "get_w": "w",
     "get_auths": "last -n 10",
     "get_critical": "journalctl -p 3 -n 5",
-    "get_ps": "apt list --installed | head -n 30",
+    "get_ps": "ps -e | head -n 30",
     "get_ss": "ss -tulnp",
 }
 
