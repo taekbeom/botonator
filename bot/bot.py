@@ -140,7 +140,7 @@ def get_phone_numbers(update: Update, context):
 def find_phone_number(update: Update, context):
     user_input = update.message.text
     user_name = update.message.from_user['username']
-    phoneNumRegex = re.compile(r'[\+7|8][\s|-]?\(?[489]\d{2}\)?[\s|-]?\d{3}[\s|-]?\d{2}[\s|-]?\d{2}')
+    phoneNumRegex = re.compile(r'(?:8|7|\+7)(?:[\s|-]?\(?\d{3}\)?[\s|-]?\d{3}[\s|-]?\d{2}[\s|-]?\d{2})')
     phoneNumberList = phoneNumRegex.findall(user_input)
     if not phoneNumberList:
         update.message.reply_text('You think you are so smart? But there are not so many phones')
@@ -191,7 +191,7 @@ def find_email(update: Update, context):
 
 def verify_password(update: Update, context):
     user_input = update.message.text
-    password_re = re.compile(r'^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$ %^&*-]).{8,}$')
+    password_re = re.compile(r'^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[!@#$%^&*()]).{8,}$')
     password_check = password_re.search(user_input)
     if not password_check:
         update.message.reply_text('Too pathetic even for lemming, i died from cringe')
@@ -203,7 +203,7 @@ def verify_password(update: Update, context):
 
 def get_apt_list(update: Update, context):
     user_input = update.message.text
-    result = ssh_connect("apt show " + user_input + " | head -n 30")
+    result = ssh_connect("apt list --installed | grep " + user_input + " | head -n 30")
     update.message.reply_text(result)
     context.bot.send_sticker(chat_id=update.message.chat_id, sticker='CAACAgEAAxkBAAErPi9mOFtMuNcbUx_l1BqQ8aIw2bot-wACgAEAAkVfBy_uK5NwnHdBaDUE')
     return ConversationHandler.END
@@ -261,7 +261,7 @@ commands_linux = {
     "get_w": "w",
     "get_auths": "last -n 10",
     "get_critical": "journalctl -p 3 -n 5",
-    "get_ps": "ps -e | head -n 30",
+    "get_ps": "apt list --installed | head -n 30",
     "get_ss": "ss -tulnp",
 }
 
